@@ -1,3 +1,69 @@
+{- hedgehog-fn shrinker bailing out repro.
+
+Normal (expected) failure:
+
+[repro]$ cabal v2-build
+[repro]$ LC_ALL="C.UTF-8" cabal v2-run
+Up to date
+━━━ HedgehogFnShrinkTest ━━━
+  ✗ shrink_fails failed at app/Main.hs:227:6
+    after 1169 tests and 69 shrinks.
+  
+        ┏━━ app/Main.hs ━━━
+    213 ┃ prop_shrink_fails :: Property
+    214 ┃ prop_shrink_fails = withTests 5000 . property $ do
+    215 ┃     sortedKvs   <- do
+    216 ┃         kvs <- forAll $ Gen.list (linear 1 {-X-} 5) (genKV kKeySmall kValueSmall)
+        ┃         │ [ ( K 6 , VInt 11 ) ]
+    217 ┃         -- let kvs = [(K 7, VInt 4)]
+    218 ┃         pure $! sortOn fst kvs
+    219 ┃     ops <- forAll $ Gen.list (linear 1 {-X-} 6) genOp
+        ┃     │ [ MapValuesOp K 6 ->
+        ┃     │     VInt 11 -> VInt 12 _ -> VInt 0 _ -> _ -> VInt 0
+        ┃     │ , RekeyMonotonicOp
+        ┃     │ , RekeyIndependentlyOp K 6 ->
+        ┃     │     VInt 12 -> [ ( K 7 , VInt 9 ) ] _ -> [] _ -> _ -> []
+        ┃     │ , RekeyMonotonicOp
+        ┃     │ , MapValuesOp K 7 -> VInt 9 -> VInt 9 _ -> VInt 0 _ -> _ -> VInt 0
+        ┃     │ ]
+    220 ┃     footnoteShow ("sortedIn" :: Text, sortedKvs)
+    221 ┃     let tresIn    = TRes sortedKvs
+    222 ┃         tresOut = performOps False ops tresIn
+    223 ┃         tresOutRuined = performOps True ops tresIn
+    224 ┃     -- print ops  -- actually this will loop on some (unreduced?) Fn values?
+    225 ┃     let (naiveOut, readKvs) = (tresNaive tresOut, tresNaive tresOutRuined)
+    226 ┃     footnoteShow ("naiveOut" :: Text, naiveOut, readKvs)
+    227 ┃     ((===) `on` subsortOnSameKeys) naiveOut readKvs
+        ┃     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ┃     │ ━━━ Failed (- lhs) (+ rhs) ━━━
+        ┃     │ - [ ( K 7 , VInt 9 ) ]
+        ┃     │ + [ ( K 7 , VInt 10 ) ]
+  
+    ( "naiveOut" , [ ( K 7 , VInt 9 ) ] , [ ( K 7 , VInt 10 ) ] )
+    ( "sortedIn" , [ ( K 6 , VInt 11 ) ] )
+  
+    This failure can be reproduced by running:
+    > recheck (Size 68) (Seed 8027241119748578357 5153930228522069531) shrink_fails
+  
+  ✗ 1 failed.
+
+
+
+Wrong kind of failure (happens 1 per 5-10 runs):
+
+
+[repro]$ LC_ALL="C.UTF-8" cabal v2-run
+Up to date
+━━━ HedgehogFnShrinkTest ━━━
+  ○ 0/1 complete (running)
+  ↯ shrink_fails failed at app/Main.hs:227:6
+  after 1697 tests and 50 shrinks (shrinking)
+repro: empty generator in function
+CallStack (from HasCallStack):
+  error, called at src/Hedgehog/Function/Internal.hs:177:16 in hedgehog-fn-1.0-EYkFGCHh84Hb6koiiI2SO:Hedgehog.Function.Internal
+
+-}
+
 {-# Language DataKinds #-}
 {-# Language DeriveGeneric #-}
 {-# Language GeneralizedNewtypeDeriving #-}
